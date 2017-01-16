@@ -1,7 +1,8 @@
 ---
-title: "Statistical Inference Course Project"
-author: Sigrid Keydana
-output: html_document
+title: "Statistical Inference Course Project, Part 1"
+author: "Sigrid Keydana"
+output:
+  html_document: default
 ---
 
 ```{r, echo = FALSE, warning=FALSE, message=FALSE}
@@ -10,21 +11,11 @@ library(dplyr)
 ```
 
 
-2. Show how variable the sample is (via variance) and compare it to the theoretical variance of the distribution.
-3. Show that the distribution is approximately normal.
-In point 3, focus on the di�erence between the distribution of a large collection of random exponentials and the distribution of a large collection of averages of 40 exponentials.
-
-
-    Did you show how variable it is and compare it to the theoretical variance of the distribution?
-    Did you perform an exploratory data analysis of at least a single plot or table highlighting basic features of the data?
-    Did the student perform some relevant confidence intervals and/or tests?
-    Were the results of the tests and/or intervals interpreted in the context of the problem correctly?
-    Did the student describe the assumptions needed for their conclusions? 
-
-# Part 1: Central Limit Theorem
+# Central Limit Theorem
 
 ## Overview
-In a few (2-3) sentences explain what is going to be reported on.
+
+First, we're going to demonstrate the Central Limit Theorem for samples of exponential data.
 
 ## Simulations
 
@@ -38,7 +29,8 @@ n <- 40
 We store the raw values ...
 
 ```{r}
-m <- matrix(rexp(nsim * n, lambda), nsim, n)
+c <- rexp(nsim * n, lambda)
+m <- matrix(c, nsim, n)
 dim(m)
 ```
 
@@ -77,7 +69,7 @@ ggplot(data_frame(m = means), aes(means)) + geom_histogram(bins = 15, color = 'c
   ggtitle('Distribution of sample means from an exponential distribution, n=40')
 ```
 
-As you see the theoretical mean and the mean of means are _very_ close:
+As you see the theoretical mean and the mean of means are _very_ close.
 Let's check the numbers:
 
 ```{r}
@@ -87,45 +79,53 @@ paste0('Mean of exponential distribution is: ', dist_mean, '. Mean of sample mea
 
 ## Sample variance versus theoretical variance
 
-Let's also have a look at the distribution of the sample variances:
+Let's also have a look at the distribution of the sample variances.
+We'll compare it to the theoretical variance of an exponential(0.2) distribution: 
 
 ```{r}
 variances <- apply(m, 1, var)
 head(variances)
 ```
 
-Let's plot them
+In contrast to the means, the sample variances are _not_ normally distributed.
 
 ```{r}
+dist_variance <- (1/lambda)^2
 ggplot(data_frame(m = variances), aes(variances)) + geom_histogram(bins = 15, color = 'cyan', fill = 'white') + 
-  geom_vline(xintercept = dist_mean, color = 'red', size = 1) +  
-  geom_vline(xintercept = sample_mean_of_means, color = 'black', size = 1) +
-  ggtitle('Distribution of sample means from an exponential distribution, n=40')
+  geom_vline(xintercept = dist_variance, color = 'red', size = 1) +
+  ggtitle('Distribution of sample variances from an exponential distribution, n=40')
 ```
 
-
-We can also compare the theoretical variance of the exponential distribution to the variance of the sample means calculated above:
-
-```{r}
-dist_variance <- 1/lambda
-variance_of_sample_means <- variance(means)
-paste0('Variance of exponential distribution is: ', dist_variance, '. Variance of sample means is: ', variance_of_sample_means)
-```
-
-
-Include figures (output from R) with titles. Highlight the variances you are comparing. Include text that explains your understanding of the differences of the variances.
 
 ## Distribution
 
-Via figures and text, explain how one can tell the distribution is approximately normal.    
-
-
-
-# Part 2: Tooth growth data
+Let's again have a look at the distribution of means, and compare it to the distribution of the raw data.
+First, here is a histogram of the means again:
 
 ```{r}
-data("ToothGrowth")
-head(ToothGrowth)
-summary(ToothGrowth)
+ggplot(data_frame(m = means), aes(means)) + geom_histogram(bins = 15, color = 'cyan', fill = 'white') +
+  ggtitle('Distribution of sample means from an exponential distribution, n=40')
 ```
+
+Here, on the other hand, is a histogram of the raw data, with the empirical mean shown in black:
+
+```{r}
+whole_sample_mean <- mean(c)
+ggplot(data_frame(c = c), aes(c)) + geom_histogram(bins = 15, color = 'cyan', fill = 'white') + 
+  geom_vline(xintercept = whole_sample_mean, color = 'black', size = 1) +
+  ggtitle('Distribution of exponentials, n=1000')
+```
+
+So we see that in contrast to the distribution of means, the exponential distribution of raw data is heavily skewed. We can also create quantile-quantile plots to check whether the means, and the raw data, respectively, are normally distributed. First, the means:
+
+```{r}
+qqnorm(means)
+```
+
+We see that theoretical quantiles and sample quantiles match very well. This is not at all the case for the raw data:
+
+```{r}
+qqnorm(c)
+```
+
 

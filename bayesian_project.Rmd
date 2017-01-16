@@ -1,0 +1,217 @@
+---
+title: "Bayesian modeling and prediction for movies"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(statsr)
+library(BAS)
+```
+
+### Load data
+
+```{r load-data}
+load("movies.Rdata")
+```
+
+
+* * *
+
+## Part 1: Data
+
+```{r}
+head(movies)
+```
+
+
+
+
+    1 pt for correct reasoning for generabizability – Answer should discuss whether random sampling was used. Learners might discuss any reservations, those should be well justified.
+
+    1 pt for correct reasoning for causality – Answer should discuss whether random assignment was used.
+
+
+* * *
+
+## Part 2: Data manipulation
+
+```{r}
+movies <- movies %>% mutate(
+  feature_film = if_else(title_type == 'Feature Film', "yes", "no"),
+  drama = if_else(genre == 'Drama', "yes", "no"),
+  mpaa_rating_R = if_else(mpaa_rating == "R", "yes", "no"),
+  oscar_season = if_else(thtr_rel_month %in% c(10,11,12), "yes", "no"),
+  summer_season = if_else(thtr_rel_month %in% c(5,6,7,8), "yes", "no")
+)
+```
+
+
+```{r}
+movies <- movies %>% select(
+    audience_score, feature_film, drama, runtime, mpaa_rating_R, thtr_rel_year, oscar_season, summer_season,
+    imdb_rating, imdb_num_votes, critics_score, best_pic_nom, best_pic_win, best_actor_win,
+    best_actress_win, best_dir_win, top200_box
+)
+head(movies)
+```
+
+
+## Part 3: Exploratory data analysis
+
+```{r}
+p1 <- ggplot(movies, aes(x = feature_film, y = audience_score)) + geom_boxplot()
+p2 <- ggplot(movies, aes(x = drama, y = audience_score)) + geom_boxplot()
+p3 <- ggplot(movies, aes(x = mpaa_rating_R, y = audience_score)) + geom_boxplot()
+p4 <- ggplot(movies, aes(x = oscar_season, y = audience_score)) + geom_boxplot()
+p5 <- ggplot(movies, aes(x = summer_season, y = audience_score)) + geom_boxplot()
+p6 <- ggplot(movies, aes(x = runtime, y = audience_score)) + geom_point()
+p7 <- ggplot(movies, aes(x = thtr_rel_year, y = audience_score)) + geom_point()
+p8 <- ggplot(movies, aes(x = imdb_rating, y = audience_score)) + geom_point()
+p9 <- ggplot(movies, aes(x = imdb_num_votes, y = audience_score)) + geom_point()
+p10 <- ggplot(movies, aes(x = critics_score, y = audience_score)) + geom_point()
+p11 <- ggplot(movies, aes(x = best_pic_nom, y = audience_score)) + geom_boxplot()
+p12 <- ggplot(movies, aes(x = best_pic_win, y = audience_score)) + geom_boxplot()
+p13 <- ggplot(movies, aes(x = best_actor_win, y = audience_score)) + geom_boxplot()
+p14 <- ggplot(movies, aes(x = best_actress_win, y = audience_score)) + geom_boxplot()
+p15 <- ggplot(movies, aes(x = best_dir_win, y = audience_score)) + geom_boxplot()
+p16 <- ggplot(movies, aes(x = top200_box, y = audience_score)) + geom_boxplot()
+grid.arrange(p1,p2,p3,p4)
+grid.arrange(p5,p6,p7,p8)
+grid.arrange(p9,p10,p11,p12)
+grid.arrange(p13,p14,p15,p16)
+```
+
+```{r}
+movies %>% group_by(feature_film) %>% summarise(mean = mean(audience_score), var = var(audience_score), cnt = n())
+```
+
+```{r}
+movies %>% group_by(drama) %>% summarise(mean = mean(audience_score), var = var(audience_score), cnt = n())
+```
+
+```{r}
+movies %>% group_by(mpaa_rating_R) %>% summarise(mean = mean(audience_score), var = var(audience_score), cnt = n())
+```
+
+```{r}
+movies %>% group_by(oscar_season) %>% summarise(mean = mean(audience_score), var = var(audience_score), cnt = n())
+```
+
+```{r}
+movies %>% group_by(summer_season) %>% summarise(mean = mean(audience_score), var = var(audience_score), cnt = n())
+```
+
+```{r}
+movies_numeric <- movies %>% select(audience_score, runtime, thtr_rel_year, imdb_rating, imdb_num_votes, critics_score)
+cor(movies_numeric)
+```
+
+
+```{r}
+movies %>% group_by(best_pic_nom) %>% summarise(mean = mean(audience_score), var = var(audience_score), cnt = n())
+```
+
+```{r}
+movies %>% group_by(best_pic_win) %>% summarise(mean = mean(audience_score), var = var(audience_score), cnt = n())
+```
+
+```{r}
+movies %>% group_by(best_actor_win) %>% summarise(mean = mean(audience_score), var = var(audience_score), cnt = n())
+```
+
+```{r}
+movies %>% group_by(best_actress_win) %>% summarise(mean = mean(audience_score), var = var(audience_score), cnt = n())
+```
+
+```{r}
+movies %>% group_by(best_dir_win) %>% summarise(mean = mean(audience_score), var = var(audience_score), cnt = n())
+```
+
+```{r}
+movies %>% group_by(top200_box) %>% summarise(mean = mean(audience_score), var = var(audience_score), cnt = n())
+```
+
+
+
+* * *
+
+## Part 4: Modeling
+
+imdb_rating: Rating on IMDB
+critics_score: Critics score on Rotten Tomatoes
+--
+audience_score: Audience score on Rotten Tomatoes
+
+model selection:
+- best predictive
+- highest post prob
+- BIC
+
+?
+
+```{r}
+fit <- bas.lm(
+  data = movies,
+  formula = audience_score ~ . ,
+  prior = "ZS-null",
+  #prior = "BIC",
+  #prior = "AIC",
+  modelprior = uniform(),
+  #modelprior = beta.binomial(1,1),
+  method = "BAS"
+  #method = "MCMC"
+  )   
+```
+
+```{r}
+fit
+```
+
+```{r}
+summary(fit)
+```
+
+
+```{r}
+plot(fit, which = 1) 
+```
+
+```{r}
+fit 
+```
+
+```{r}
+fit 
+```
+
+```{r}
+fit 
+```
+
+```{r}
+fit 
+```
+
+* * *
+
+## Part 5: Prediction
+
+NOTE: Insert code chunks as needed by clicking on the "Insert a new code chunk" 
+button above. Make sure that your code is visible in the project you submit. 
+Delete this note when before you submit your work.
+
+* * *
+
+## Part 6: Conclusion
+

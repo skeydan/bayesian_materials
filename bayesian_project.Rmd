@@ -17,6 +17,7 @@ library(dplyr)
 library(gridExtra)
 library(statsr)
 library(BAS)
+library(GGally)
 ```
 
 ### Load data
@@ -30,21 +31,21 @@ load("movies.Rdata")
 
 ## Part 1: Data
 
+Our task is to predict the  audience score on Rotten Tomatoes from a set of movie features as well as metadata obtained from the IMDB and Rotten Tomatoes websites.
+The data have been sampled at random, so the results will be generalizable; however, we will not be able to say anything about causality as this is an observation study (no random assignment was used).
+
+Let's first inspect the dataset:
+
 ```{r}
 head(movies)
 ```
 
 
-
-
-    1 pt for correct reasoning for generabizability – Answer should discuss whether random sampling was used. Learners might discuss any reservations, those should be well justified.
-
-    1 pt for correct reasoning for causality – Answer should discuss whether random assignment was used.
-
-
 * * *
 
 ## Part 2: Data manipulation
+
+Before further exploring the data, let's first do some feature engineering...
 
 ```{r}
 movies <- movies %>% mutate(
@@ -56,6 +57,7 @@ movies <- movies %>% mutate(
 )
 ```
 
+... and restrict the set of possible predictors to variables we think might be relevant:
 
 ```{r}
 movies <- movies %>% select(
@@ -68,6 +70,8 @@ head(movies)
 
 
 ## Part 3: Exploratory data analysis
+
+To get an idea about possible correlations, we plot audience_score against every hypothetical predictor:
 
 ```{r}
 p1 <- ggplot(movies, aes(x = feature_film, y = audience_score)) + geom_boxplot()
@@ -92,6 +96,9 @@ grid.arrange(p9,p10,p11,p12)
 grid.arrange(p13,p14,p15,p16)
 ```
 
+From the plots, we think that feature_film, critics_score and imdb_rating might be interesting, as well as possibly best_pic_win and best_pic_nom.
+In addition to the plots, let's inspect audience_score means and variances for the categorical variables, and inspect the intercorrelations for the numerical ones. The latter will also show us which predictors are intercorrelated and how much so.
+
 ```{r}
 movies %>% group_by(feature_film) %>% summarise(mean = mean(audience_score), var = var(audience_score), cnt = n())
 ```
@@ -114,9 +121,10 @@ movies %>% group_by(summer_season) %>% summarise(mean = mean(audience_score), va
 
 ```{r}
 movies_numeric <- movies %>% select(audience_score, runtime, thtr_rel_year, imdb_rating, imdb_num_votes, critics_score)
-cor(movies_numeric)
+cor(movies_numeric, use = "complete.obs")
 ```
 
+Not surprisingly, audience_score is highly correlated with imdb_rating and critics_score, but critics_score and audience_score are themselves highly correlated.
 
 ```{r}
 movies %>% group_by(best_pic_nom) %>% summarise(mean = mean(audience_score), var = var(audience_score), cnt = n())
@@ -148,68 +156,126 @@ movies %>% group_by(top200_box) %>% summarise(mean = mean(audience_score), var =
 
 ## Part 4: Modeling
 
-imdb_rating: Rating on IMDB
-critics_score: Critics score on Rotten Tomatoes
---
-audience_score: Audience score on Rotten Tomatoes
-
-model selection:
-- best predictive
-- highest post prob
-- BIC
-
-?
+Now, it's time to fit the models. We use a uniform prior over models and ZS-null prior for the coefficients.
 
 ```{r}
 fit <- bas.lm(
   data = movies,
   formula = audience_score ~ . ,
   prior = "ZS-null",
-  #prior = "BIC",
-  #prior = "AIC",
   modelprior = uniform(),
-  #modelprior = beta.binomial(1,1),
   method = "BAS"
-  #method = "MCMC"
   )   
 ```
+
+Let's directly look at the marginal posterior inclusion probabilities (pips) for the predictors.
+All  predictors with pip > 0.5 would be included in the _median probability model_.
+As we see, these are imdb_rating and critics_score (plus the intercept).
+Interestingly, both are included, even though they are highly correlated (multicollinearity).
+
+
+```{r}
+plot(fit, which = 4) 
+```
+
+
+We can also get the pips printing the fit object returned, Of course, we see the same result as in the plot.
 
 ```{r}
 fit
 ```
 
+Now, let's look at the best 5 models (posterior probability-wise):
+
 ```{r}
 summary(fit)
 ```
 
+So the highest posterior probability model, just like the median probability model, includes the intercept, imdb_rating, and critics_score.
+Looking at the Bayes factors, and the posterior probabilities, for the other models, we see that there is just one model that works as well as the best one (row 2). This additionally includes runtime.
+However, the correlation between audience_score and runtime is low, and this is anyway just the second best model, so there is no reason to include this additional predictor (uselessly inflating the number of parameters in the model.)
+
+So we'll stick with predictors critics_score and imdb_rating.
+Let's look at posterior probabilities and confidence intervals for these:
 
 ```{r}
-plot(fit, which = 1) 
+plot(coef(fit), subset=c(9,11))
 ```
 
-```{r}
-fit 
-```
+Both parameters are _very_ unlikely to be 0. We also see this from the confidence intervals.
 
 ```{r}
-fit 
+plot(confint(coef(fit), parm=c(9,11)))
 ```
 
-```{r}
-fit 
-```
-
-```{r}
-fit 
-```
 
 * * *
 
 ## Part 5: Prediction
 
-NOTE: Insert code chunks as needed by clicking on the "Insert a new code chunk" 
-button above. Make sure that your code is visible in the project you submit. 
-Delete this note when before you submit your work.
+Now, let's try predicting audience_score for a new movie. 
+We construct the movie by setting thtr_rel_year to 2016, choosing "yes" for all categorical variables and using the respective variable mean from the movies dataset for the numerical variables.
+
+```{r}
+movies_new <- data_frame(
+  audience_score=mean(movies$audience_score),
+  feature_film=factor("yes", levels = c("yes","no")),
+  drama=factor("yes", levels = c("yes","no")),
+  runtime=mean(na.omit(movies$runtime)),
+  mpaa_rating_R=factor("yes", levels = c("yes","no")),
+  thtr_rel_year=2016,
+  oscar_season=factor("yes", levels = c("yes","no")),
+  summer_season=factor("yes", levels = c("yes","no")),
+  imdb_rating=mean(movies$imdb_rating),
+  imdb_num_votes=mean(movies$imdb_num_votes),
+  critics_score=mean(movies$critics_score),
+  best_pic_win=factor("yes", levels = c("yes","no")),
+  best_pic_nom=factor("yes", levels = c("yes","no")),
+  best_actor_win=factor("yes", levels = c("yes","no")),
+  best_actress_win=factor("yes", levels = c("yes","no")),
+  best_dir_win=factor("yes", levels = c("yes","no")),
+  top200_box=factor("yes", levels = c("yes","no"))
+)
+movies_new
+  
+```
+
+
+We will compare predictions from
+* the highest posterior probability model (HPM),
+* Bayesian model averaging (BMA),
+* the median probability model (MPM), and
+* best predictive model (BPM).
+
+```{r}
+HPM = predict(fit, movies_new, estimator="HPM")
+print(HPM$fit[1])
+(fit$namesx[attr(HPM$fit, 'model') +1])
+```
+
+```{r}
+MPM = predict(fit, estimator="MPM")
+(fit$namesx[attr(MPM$fit, 'model') +1])[-1]
+```
+
+```{r}
+BMA = predict(fit, estimator="BMA")
+(fit$namesx[attr(BMA$fit, 'model') +1])[-1]
+```
+
+```{r}
+BPM = predict(fit, estimator="BPM")
+(fit$namesx[attr(BPM$fit, 'model') +1])[-1]
+```
+
+```{r}
+ggpairs(data.frame(HPM = as.vector(HPM$fit),  #this used predict so we need to extract fitted values
+                   MPM = as.vector(MPM$fit),  # this used fitted
+                   BPM = as.vector(BPM$fit),  # this used fitted
+                   BMA = as.vector(BMA$fit))) # this used predict
+
+```
+
 
 * * *
 
